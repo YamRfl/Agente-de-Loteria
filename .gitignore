@@ -1,0 +1,34 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Banco de Dados (SQLite) ---
+# Ignoramos o arquivo .db para que cada instalação tenha seu próprio banco
+# Se quiser manter um banco de teste, remova a linha abaixo
+*.db
+
+# --- Streamlit ---
+.streamlit/
+# Opcional: ignorar relatórios de erro do Streamlit
+browser_crash_report_enabled = false
+
+# --- Sistema Operacional ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Arquivos Gerados (Downloads) ---
+# Ignora arquivos CSV que você baixar durante os testes
+*.csv
