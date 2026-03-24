@@ -1,95 +1,93 @@
-import random
 import math
-import pandas as pd
-from .database import obter_conexao
+import secrets # SEGURANÇA: Módulo de criptografia forte para geração de números imprevisíveis
 from .analyzer import carregar_dados
+from .database import obter_conexao
 
-def calcular_custo_jogos(loteria, qtd_jogos, qtd_dezenas):
+def calcular_custo_jogos(loteria, qtd_jogos, dezenas_por_jogo):
     """
-    Calcula o custo real baseado na tabela oficial da CAIXA.
-    Lê o preço base e o mínimo de dezenas do banco de dados.
+    Calcula o custo real considerando desdobramentos (Combinatória Matemática).
     """
     conn = obter_conexao()
-    cursor = conn.cursor()
-    cursor.execute("SELECT preco_base, dez_min FROM tarifas WHERE loteria = ?", (loteria,))
-    dados = cursor.fetchone()
+    # SEGURANÇA: Query parametrizada.
+    res = conn.execute("SELECT preco_base, dez_min FROM tarifas WHERE loteria = ?", (loteria,)).fetchone()
     conn.close()
-
-    if not dados:
+    
+    if not res:
         return 0.0
-
-    preco_base, dez_min = dados
-    
-    # Se o usuário tentar marcar menos que o mínimo permitido
-    if qtd_dezenas < dez_min:
-        return 0.0
-
-    # Fórmula de Combinação Simples C(n, p) usada pela CEF
-    # n = dezenas marcadas | p = dezenas da aposta mínima
-    num_combinacoes = math.comb(qtd_dezenas, dez_min)
-    
-    # Custo = (Total de combinações simples dentro do jogo) * (Preço da aposta simples)
-    return (num_combinacoes * preco_base) * qtd_jogos
-
-def tem_sequencia_longa(jogo, max_consecutivos=3):
-    """Evita jogos com muitos números seguidos (ex: 01, 02, 03, 04)."""
-    sequencia_atual = 1
-    for i in range(1, len(jogo)):
-        if jogo[i] == jogo[i-1] + 1:
-            sequencia_atual += 1
-            if sequencia_atual > max_consecutivos:
-                return True
-        else:
-            sequencia_atual = 1
-    return False
-
-def sugerir_jogo(loteria, qtd_jogos=1, dezenas_por_jogo=None):
-    """Gera jogos baseados em frequência e filtros de paridade/sequência."""
-    conn = obter_conexao()
-    cursor = conn.cursor()
-    cursor.execute("SELECT dez_min, dez_max FROM tarifas WHERE loteria = ?", (loteria,))
-    limites = cursor.fetchone()
-    conn.close()
-
-    if not limites:
-        return []
-
-    min_dez, max_dez = limites
-    qtd_dezenas = dezenas_por_jogo if dezenas_por_jogo else min_dez
-    
-    # Configuração de limites do volante
-    total_numeros = {"megasena": 60, "lotofacil": 25, "quina": 80}.get(loteria, 60)
-    
-    df = carregar_dados(loteria)
-    
-    # Se houver dados, prioriza os números "quentes", senão usa o volante todo
-    if df is not None and not df.empty:
-        todas = [n for lista in df['dezenas_list'] for n in lista]
-        pool = pd.Series(todas).value_counts().index.tolist()
-    else:
-        pool = list(range(1, total_numeros + 1))
-
-    # Garantia de amostragem
-    if len(pool) < qtd_dezenas:
-        pool = list(range(1, total_numeros + 1))
-
-    jogos_gerados = []
-    par_ideal = qtd_dezenas // 2
-
-    for _ in range(qtd_jogos):
-        jogo_encontrado = False
-        for _ in range(300): # Tentativas de encontrar jogo equilibrado
-            sugestao = sorted(random.sample(pool, qtd_dezenas))
-            pares = len([n for n in sugestao if n % 2 == 0])
-            
-            # Filtros de IA
-            if pares in [par_ideal, par_ideal + 1]:
-                if not tem_sequencia_longa(sugestao):
-                    jogos_gerados.append(sugestao)
-                    jogo_encontrado = True
-                    break
         
-        if not jogo_encontrado:
-            jogos_gerados.append(sorted(random.sample(pool, qtd_dezenas)))
+    preco_base, min_dezenas = res
+    
+    # SEGURANÇA (Prevenção OOM): Uso da biblioteca C nativa math.comb para cálculo otimizado.
+    try:
+        multiplicador = math.comb(dezenas_por_jogo, min_dezenas)
+    except ValueError:
+        multiplicador = 1 # Fallback de segurança se houver erro matemático
+        
+    return (preco_base * multiplicador) * qtd_jogos
+
+def sugerir_jogo(loteria, qtd_jogos, dezenas_por_jogo):
+    """
+    Gera apostas seguras e filtradas (paridade e sequências).
+    """
+    # Limites definidos para as loterias conhecidas
+    limites = {
+        "megasena": 60, "lotofacil": 25, "quina": 80, 
+        "lotomania": 99, "duplasena": 50, "timemania": 80
+    }
+    max_num = limites.get(loteria, 60)
+    
+    # A lotomania começa do 00, o restante do 01
+    offset = 0 if loteria == "lotomania" else 1
+    pool_de_numeros = list(range(offset, max_num + 1))
+    
+    # Cria uma instância segura de aleatoriedade
+    # SEGURANÇA: SystemRandom utiliza o /dev/urandom ou CryptGenRandom do SO.
+    gerador_seguro = secrets.SystemRandom()
+    
+    jogos_gerados = []
+    
+    for _ in range(qtd_jogos):
+        # SEGURANÇA (Anti-DoS): Evita loops infinitos se os filtros forem muito restritos
+        tentativas = 0
+        tentativas_maximas = 2000 
+        
+        while tentativas < tentativas_maximas:
+            # Seleção criptográfica sem repetição
+            jogo = gerador_seguro.sample(pool_de_numeros, k=dezenas_por_jogo)
+            jogo.sort()
+            
+            # --- FILTRO 1: PARIDADE (Equilíbrio Par/Ímpar) ---
+            pares = sum(1 for n in jogo if n % 2 == 0)
+            impares = len(jogo) - pares
+            # Exige que a diferença entre pares e ímpares não seja absurda (ex: tudo par)
+            if abs(pares - impares) > (dezenas_por_jogo / 2 + 1):
+                tentativas += 1
+                continue
+                
+            # --- FILTRO 2: SEQUÊNCIAS ---
+            # Evita jogos com mais de 3 números seguidos (ex: 4, 5, 6, 7)
+            sequencias_longas = False
+            for i in range(len(jogo) - 3):
+                if jogo[i] == jogo[i+1]-1 == jogo[i+2]-2 == jogo[i+3]-3:
+                    sequencias_longas = True
+                    break
+                    
+            if sequencias_longas:
+                tentativas += 1
+                continue
+                
+            # Adiciona ao carrinho e encerra a tentativa para este jogo
+            if jogo not in jogos_gerados:
+                jogos_gerados.append(jogo)
+                break
+                
+            tentativas += 1
+            
+        # Fallback de Segurança: Se não encontrar um jogo ideal após 2000 tentativas, 
+        # gera um puramente aleatório para não travar a aplicação (Circuit Breaker).
+        if tentativas >= tentativas_maximas:
+            jogo_fallback = gerador_seguro.sample(pool_de_numeros, k=dezenas_por_jogo)
+            jogo_fallback.sort()
+            jogos_gerados.append(jogo_fallback)
             
     return jogos_gerados

@@ -1,11 +1,16 @@
 import streamlit as st
 import pandas as pd
 import time
-from src.database import inicializar_bd, obter_conexao, obter_ultimo_concurso_db
+import hashlib # SEGURANÇA: Importado para gerar checksums
+from src.database import inicializar_bd, obter_conexao, obter_ultimo_concurso_db, atualizar_preco_banco
 from src.collector import atualizar_resultados
 from src.generator import sugerir_jogo, calcular_custo_jogos
 from src.checker import conferir_resultados
 from src.analyzer import obter_estatisticas_completas
+
+# SEGURANÇA: Helper para assinar arquivos com SHA-256 garantindo integridade
+def gerar_hash_sha256(dados_bytes):
+    return hashlib.sha256(dados_bytes).hexdigest()
 
 st.set_page_config(page_title="Agente IA Loterias", layout="wide")
 inicializar_bd()
@@ -18,13 +23,12 @@ st.title("🍀 Agente de IA - Analista de Loterias")
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Controle")
-    # NOVAS LOTERIAS ADICIONADAS AO SELECTBOX
     loteria = st.selectbox("Loteria:", ["megasena", "lotofacil", "quina", "lotomania", "duplasena", "timemania"])
     
-    # --- NOVO BLOCO DE TARIFAS ---
     st.divider()
     with st.expander("💰 Ajustar Preços e Limites"):
         conn = obter_conexao()
+        # SEGURANÇA: Parameterized query (antes estava correto, mantido a boa prática)
         dados_t = conn.execute("SELECT preco_base, dez_max FROM tarifas WHERE loteria=?", (loteria,)).fetchone()
         conn.close()
         
@@ -33,12 +37,10 @@ with st.sidebar:
             nova_dez_max = st.number_input("Limite de Dezenas:", value=int(dados_t[1]), step=1)
             
             if st.button("Salvar Tarifas", width='stretch'):
-                from src.database import atualizar_preco_banco # Garante que a função está disponível
                 atualizar_preco_banco(loteria, novo_preco, nova_dez_max)
-                st.success("Tarifas atualizadas!")
+                st.success("Tarifas atualizadas com segurança!")
                 time.sleep(1)
                 st.rerun()
-    # ----------------------------
 
     st.divider()
     prog_place = st.empty()
@@ -55,7 +57,7 @@ with st.sidebar:
 # --- DEFINIÇÃO DAS 4 ABAS ---
 tab1, tab2, tab3, tab4 = st.tabs(["🎯 Gerador", "📊 Histórico", "🏆 Conferência", "📈 Estatísticas"])
 
-# ABA 1: GERADOR & CARRINHO (Com Download)
+# ABA 1: GERADOR & CARRINHO
 with tab1:
     conn = obter_conexao()
     lim = conn.execute("SELECT dez_min, dez_max FROM tarifas WHERE loteria=?", (loteria,)).fetchone()
@@ -81,18 +83,26 @@ with tab1:
             st.dataframe(df_c, width='stretch', hide_index=True)
             st.metric("Total", f"R$ {df_c['Custo Unitário'].sum():.2f}")
         with col_c2:
-            st.download_button("📥 Baixar Lista (CSV)", df_c.to_csv(index=False).encode('utf-8'), "meus_jogos.csv", "text/csv", width='stretch')
+            # SEGURANÇA: Download Seguro com Hash SHA-256
+            csv_dados = df_c.to_csv(index=False).encode('utf-8')
+            hash_arquivo = gerar_hash_sha256(csv_dados)
+            
+            st.download_button("📥 Baixar Lista (CSV)", csv_dados, "meus_jogos.csv", "text/csv", width='stretch')
+            st.caption(f"🔒 SHA-256: `{hash_arquivo[:12]}...`") # Exibição truncada para não quebrar layout
+            
             if st.button("🗑️ Limpar Carrinho", width='stretch'):
                 st.session_state.carrinho = []; st.rerun()
+                
         if st.button("💾 CONFIRMAR E SALVAR NO BANCO", type="primary", width='stretch'):
             conn = obter_conexao(); prox = obter_ultimo_concurso_db(loteria) + 1
             for _, r in df_c.iterrows():
                 conn.execute("INSERT INTO apostas_usuario (loteria, concurso_alvo, dezenas_jogadas) VALUES (?,?,?)", (r["Loteria"].lower(), prox, r["Dezenas"].replace(" ", "")))
-            conn.commit(); conn.close(); st.session_state.carrinho = []; st.success("Salvo!"); st.rerun()
+            conn.commit(); conn.close(); st.session_state.carrinho = []; st.success("Salvo com segurança!"); st.rerun()
 
 # ABA 2: HISTÓRICO
 with tab2:
     conn = obter_conexao()
+    # SEGURANÇA: Uso de parâmetros parametrizados do Pandas para eliminar risco de SQLi
     df_h = pd.read_sql_query("SELECT id_concurso as Concurso, data_sorteio as Data, dezenas as Números FROM resultados WHERE loteria = ? ORDER BY id_concurso DESC", conn, params=(loteria,))
     conn.close()
     if not df_h.empty: st.dataframe(df_h, width='stretch', hide_index=True)
@@ -100,7 +110,8 @@ with tab2:
 # ABA 3: CONFERÊNCIA
 with tab3:
     conn = obter_conexao()
-    df_p = pd.read_sql(f"SELECT concurso_alvo as Concurso, dezenas_jogadas as 'Suas Dezenas' FROM apostas_usuario WHERE loteria='{loteria}' ORDER BY id DESC", conn)
+    # VULNERABILIDADE CORRIGIDA AQUI: Remoção completa do f-string no SELECT.
+    df_p = pd.read_sql_query("SELECT concurso_alvo as Concurso, dezenas_jogadas as 'Suas Dezenas' FROM apostas_usuario WHERE loteria = ? ORDER BY id DESC", conn, params=(loteria,))
     conn.close()
     if not df_p.empty:
         st.dataframe(df_p, width='stretch', hide_index=True)

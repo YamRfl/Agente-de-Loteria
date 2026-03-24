@@ -3,53 +3,56 @@ from .database import obter_conexao
 
 def conferir_resultados(loteria):
     """
-    Compara as apostas do usuário salvas no banco com os resultados reais 
-    que foram baixados da CAIXA.
+    Compara as apostas registradas pelo usuário com o banco oficial da Caixa.
     """
     conn = obter_conexao()
     
-    # 1. Busca as apostas do usuário para a loteria selecionada
+    # SEGURANÇA: Prevenção absoluta de SQL Injection utilizando query parametrizada.
     query_apostas = "SELECT concurso_alvo, dezenas_jogadas FROM apostas_usuario WHERE loteria = ?"
-    df_apostas = pd.read_sql_query(query_apostas, conn, params=(loteria,))
+    apostas_df = pd.read_sql_query(query_apostas, conn, params=(loteria,))
     
-    # 2. Busca os resultados reais já baixados no banco
-    query_resultados = "SELECT id_concurso, dezenas FROM resultados WHERE loteria = ?"
-    df_resultados = pd.read_sql_query(query_resultados, conn, params=(loteria,))
-    
-    conn.close()
-
-    if df_apostas.empty:
+    if apostas_df.empty:
+        conn.close()
         return None
 
-    relatorio = []
-
-    for _, aposta in df_apostas.iterrows():
+    resultados_formatados = []
+    
+    # Itera sobre os jogos salvos do usuário
+    for _, aposta in apostas_df.iterrows():
         concurso = aposta['concurso_alvo']
-        jogadas = set(aposta['dezenas_jogadas'].split(','))
+        # Converte a string salva "01, 02, 03" para um Set de inteiros para comparação rápida
+        dezenas_jogadas_set = set(map(int, aposta['dezenas_jogadas'].replace(' ', '').split(',')))
         
-        # Procura o resultado oficial desse concurso no banco
-        res_oficial = df_resultados[df_resultados['id_concurso'] == concurso]
+        # SEGURANÇA: Novamente, uso rigoroso de parâmetros (?, ?) para o SELECT interno
+        query_oficial = "SELECT dezenas FROM resultados WHERE loteria = ? AND id_concurso = ?"
+        resultado_oficial_df = pd.read_sql_query(query_oficial, conn, params=(loteria, concurso))
         
-        if not res_oficial.empty:
-            sorteadas = set(res_oficial.iloc[0]['dezenas'].split(','))
-            acertos = jogadas.intersection(sorteadas)
-            qtd_acertos = len(acertos)
+        if not resultado_oficial_df.empty:
+            # Converte as dezenas sorteadas para um Set
+            sorteio_oficial_str = resultado_oficial_df.iloc[0]['dezenas']
+            dezenas_oficiais_set = set(map(int, sorteio_oficial_str.split(',')))
             
-            relatorio.append({
+            # Cálculo de Intersecção (Acertos)
+            acertos = dezenas_jogadas_set.intersection(dezenas_oficiais_set)
+            
+            resultados_formatados.append({
                 "Concurso": concurso,
-                "Suas Dezenas": aposta['dezenas_jogadas'],
-                "Sorteadas": res_oficial.iloc[0]['dezenas'],
-                "Acertos": qtd_acertos,
-                "Números Acertados": ",".join(sorted(list(acertos))) if acertos else "-"
+                "Seu Jogo": aposta['dezenas_jogadas'],
+                "Sorteio Oficial": sorteio_oficial_str,
+                "Acertos (Qtd)": len(acertos),
+                "Números Acertados": ", ".join(map(str, sorted(acertos))) if acertos else "Nenhum acerto"
             })
         else:
-            # Caso o concurso ainda não tenha sido sorteado ou baixado
-            relatorio.append({
+            # Caso o concurso alvo do usuário ainda não tenha sido sorteado/baixado
+            resultados_formatados.append({
                 "Concurso": concurso,
-                "Suas Dezenas": aposta['dezenas_jogadas'],
-                "Sorteadas": "Aguardando sorteio...",
-                "Acertos": 0,
-                "Números Acertados": "N/A"
+                "Seu Jogo": aposta['dezenas_jogadas'],
+                "Sorteio Oficial": "Sorteio Pendente",
+                "Acertos (Qtd)": "-",
+                "Números Acertados": "-"
             })
 
-    return pd.DataFrame(relatorio)
+    conn.close()
+    
+    # Retorna o DataFrame que o Streamlit irá renderizar na tela
+    return pd.DataFrame(resultados_formatados)
