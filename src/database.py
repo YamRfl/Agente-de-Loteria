@@ -18,6 +18,17 @@ def inicializar_bd():
     cursor.execute('''CREATE TABLE IF NOT EXISTS tarifas (
         loteria TEXT PRIMARY KEY, preco_base REAL, dez_min INTEGER, dez_max INTEGER)''')
     
+    # NOVAS LOTERIAS ADICIONADAS AQUI
+    tarifas = [
+        ('megasena', 5.0, 6, 20),
+        ('lotofacil', 3.0, 15, 20),
+        ('quina', 2.5, 5, 15),
+        ('lotomania', 3.0, 50, 50),
+        ('duplasena', 2.5, 6, 15),
+        ('timemania', 3.5, 10, 10)
+    ]
+    cursor.executemany('INSERT OR IGNORE INTO tarifas VALUES (?, ?, ?, ?)', tarifas)
+    
     # Tabela de controle para o botão PARAR
     cursor.execute('CREATE TABLE IF NOT EXISTS controle_sessao (id INTEGER PRIMARY KEY, status TEXT)')
     cursor.execute('INSERT OR IGNORE INTO controle_sessao (id, status) VALUES (1, "ok")')
@@ -42,3 +53,10 @@ def obter_ultimo_concurso_db(loteria):
     res = conn.execute("SELECT MAX(id_concurso) FROM resultados WHERE loteria = ?", (loteria,)).fetchone()[0]
     conn.close()
     return res if res else 0
+
+# Função que faltava para atualizar a tarifa a partir do app.py
+def atualizar_preco_banco(loteria, preco, dez_max):
+    conn = obter_conexao()
+    conn.execute("UPDATE tarifas SET preco_base = ?, dez_max = ? WHERE loteria = ?", (preco, dez_max, loteria))
+    conn.commit()
+    conn.close()

@@ -1,6 +1,4 @@
-requests
-pandas
 streamlit
-matplotlib
-jinja2
-urllib3
+pandas
+requests
+sqlite3

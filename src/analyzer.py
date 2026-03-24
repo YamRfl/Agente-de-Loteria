@@ -45,19 +45,36 @@ def obter_estatisticas_completas(loteria):
     freq = freq.sort_values(by='Sorteios', ascending=False)
 
     # Processamento para Atraso
-    max_num = {"megasena": 60, "lotofacil": 25, "quina": 80}.get(loteria, 60)
+    # Novas loterias mapeadas no limite de números
+    max_num = {
+        "megasena": 60, 
+        "lotofacil": 25, 
+        "quina": 80,
+        "lotomania": 99, 
+        "duplasena": 50,
+        "timemania": 80
+    }.get(loteria, 60)
+    
     atraso_lista = []
     ultimo_concurso = df['id_concurso'].max()
 
-    for i in range(1, max_num + 1):
+    # Tratamento para Lotomania (Inicia em 0, as outras iniciam em 1)
+    range_inicio = 0 if loteria == "lotomania" else 1
+
+    for i in range(range_inicio, max_num + 1):
         num_str = str(i).zfill(2)
         # Busca o número exato usando regex para evitar que '1' pegue '10'
         sub_df = df[df['dezenas'].str.contains(fr'\b{num_str}\b', regex=True)]
+        
         if not sub_df.empty:
             atraso = ultimo_concurso - sub_df['id_concurso'].max()
         else:
             atraso = total_concursos
-        atraso_lista.append({"Número": i, "Atraso": atraso})
+            
+        # Formatação de exibição visual para o "00" da Lotomania
+        numero_exibicao = "00" if loteria == "lotomania" and i == 0 else i
+        
+        atraso_lista.append({"Número": numero_exibicao, "Atraso": atraso})
     
     df_atraso = pd.DataFrame(atraso_lista).sort_values(by="Atraso", ascending=False)
     

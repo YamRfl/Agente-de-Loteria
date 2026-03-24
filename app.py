@@ -18,7 +18,8 @@ st.title("🍀 Agente de IA - Analista de Loterias")
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Controle")
-    loteria = st.selectbox("Loteria:", ["megasena", "lotofacil", "quina"])
+    # NOVAS LOTERIAS ADICIONADAS AO SELECTBOX
+    loteria = st.selectbox("Loteria:", ["megasena", "lotofacil", "quina", "lotomania", "duplasena", "timemania"])
     
     # --- NOVO BLOCO DE TARIFAS ---
     st.divider()
@@ -107,7 +108,7 @@ with tab3:
             res = conferir_resultados(loteria)
             if res is not None: st.table(res)
 
-# ABA 4: ESTATÍSTICAS (O que estava faltando)
+# ABA 4: ESTATÍSTICAS
 with tab4:
     st.header(f"Análise Estatística - {loteria.upper()}")
     df_freq, df_atraso = obter_estatisticas_completas(loteria)
