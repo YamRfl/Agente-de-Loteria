@@ -85,5 +85,6 @@ Iniciar Agente:
 
 Bash
 streamlit run app.py
+
 ⚠️ Nota Legal
 Ferramenta de análise probabilística e estudo estatístico e preditivo. Ela auxilia na filtragem de combinações improváveis, mas não garante ganhos financeiros, pois loterias são eventos de sorte independentes. Jogue com responsabilidade e inteligência. 🍀
