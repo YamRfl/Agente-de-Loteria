@@ -1,52 +1,54 @@
-# 🍀 Agente de IA - Analista de Loterias (v3.0)
+# 🍀 Agente de IA - Analista de Loterias (v4.5)
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-UI-ff4b4b.svg)](https://streamlit.io/)
 [![SQLite](https://img.shields.io/badge/SQLite-3.x-003b57.svg)](https://sqlite.org/)
+[![Machine Learning](https://img.shields.io/badge/Machine%20Learning-Scikit--Learn-F7931E.svg)](https://scikit-learn.org/)
+[![Plotly](https://img.shields.io/badge/Data%20Viz-Plotly-3F4F75.svg)](https://plotly.com/)
 [![Security](https://img.shields.io/badge/Security-Hardened-success.svg)](#)
 
-O **Agente de IA - Analista de Loterias** é uma plataforma completa de engenharia de dados e análise estatística voltada para as loterias da Caixa (**Mega-Sena, Lotofácil, Quina, Lotomania, Dupla Sena e Timemania**). O sistema combina coleta em tempo real, persistência em banco de dados relacional e algoritmos de sugestão baseados em tendências históricas.
+O **Agente de IA - Analista de Loterias** é uma plataforma de engenharia de dados, ciência preditiva e análise combinatória voltada para as loterias da Caixa (**Mega-Sena, Lotofácil, Quina, Lotomania, Dupla Sena e Timemania**). O sistema combina coleta em tempo real, segurança criptográfica, modelos de **Machine Learning** e visualização de dados interativa para otimização de jogos.
 
 ---
 
 ## 🚀 Funcionalidades Principais
 
-### 🛡️ Segurança e Integridade (Novidade v3.0)
-- **Criptografia CSPRNG:** Motor de geração de jogos movido pelo módulo `secrets` do SO, garantindo total imprevisibilidade criptográfica (sem uso do vulnerável `random`).
-- **Prevenção SQLi e XSS:** Arquitetura de dados 100% blindada utilizando *Prepared Statements* (consultas parametrizadas) nas integrações com o SQLite.
-- **Checksum de Arquivos:** Geração de hash **SHA-256** no momento do download para atestar a integridade das apostas geradas (Prevenção MITM).
-- **Anti-DoS e OOM:** *Circuit Breakers* aplicados aos algoritmos de filtragem de jogos e uso de bibliotecas C-nativas para evitar estouro de memória em cálculos combinatórios.
+### 🧠 Inteligência Artificial Preditiva (v4.0)
+- **K-Means Clustering:** A IA treina um modelo não-supervisionado com o histórico completo da loteria.
+- **Análise de DNA do Jogo:** Algoritmo que extrai *features* complexas (Soma, Pares/Ímpares, Primos e Dispersão).
+- **Filtro Preditivo Automático:** Aprova apenas jogos que pertencem ao grupo (cluster) matemático com maior índice histórico de vitórias.
 
-### 📡 Coleta & Sincronização
-- **Update em Tempo Real:** Conexão direta com a API da Caixa Econômica Federal.
-- **Barra de Incremento Visual:** Monitoramento do progresso de download concurso a concurso.
-- **Arquitetura Incremental:** O sistema identifica o último sorteio no banco e baixa apenas o que falta.
+### 🛠️ Filtros Matemáticos Manuais e Avançados (v4.5)
+Controle cirúrgico para apostadores profissionais limitarem o espaço amostral de combinações:
+- **Quantitativos:** Limites exatos de Soma das Dezenas, Pares, Primos, Múltiplos de 3 e sequência de Fibonacci.
+- **Espaciais:** Regras de preenchimento do volante (Proporção Moldura vs. Miolo, e máximo de dezenas permitidas por Linha/Coluna).
+- **Repetidas:** Força o sistema a incluir/excluir dezenas que saíram no concurso imediatamente anterior.
 
-### 📈 Inteligência Estatística (Aba dedicada)
-- **Análise de Incidência:** Ranking dinâmico dos números mais sorteados com barras de frequência.
-- **Heatmap de Atraso:** Mapa de calor que identifica há quantos concursos cada dezena não é sorteada (identificação visual de números "frios" e "atrasados").
-- **Paridade e Tendência:** Algoritmos que filtram jogos baseados no equilíbrio entre pares e ímpares.
+### 📊 Visualização Interativa de Dados (v4.5)
+- **Dashboards Plotly:** Gráficos vetoriais interativos (Top 20 Dezenas Mais Sorteadas e Maiores Atrasos) com *tooltips* ao passar o mouse.
+- **Alternância de Visão:** Toggle limpo para trocar entre o modo gráfico e a visualização de tabelas completas formatadas com barras de progresso e mapas de calor.
 
-### 🎯 Gerador & Gestão de Apostas
-- **Motor de Sugestão:** Criação de jogos respeitando frequências e evitando sequências óbvias (ex: 01, 02, 03).
-- **Sistema de Carrinho:** Adicione múltiplos jogos de diferentes loterias e visualize o custo total antes de confirmar.
-- **Exportação CSV:** Gere listas de apostas prontas para conferência ou impressão.
-- **Banco de Apostas:** Salve seus jogos gerados no banco de dados para conferência automática futura.
+### 🎯 Gerador, Exportação e Conferência (v4.5)
+- **Motor de Sugestão:** Gera milhares de jogos em milissegundos respeitando os filtros, com *Circuit Breakers* para evitar travamento em regras impossíveis.
+- **Exportação Profissional:** Baixe suas apostas prontas e formatadas em **Excel (.xlsx)**.
+- **Conferência Automatizada:** Salve jogos no banco local para verificar acertos de forma automática e limpe o histórico (botão "Lixeira") quando desejar.
 
-### 💰 Gestão Financeira & Customização
-- **Painel de Tarifas:** Ajuste o valor da aposta simples e o limite de dezenas diretamente pela interface (Sidebar).
-- **Cálculo de Desdobramentos:** Estimativa real do custo de jogos com marcações superiores à mínima (ex: jogar 15 números na Lotofácil).
+### 🛡️ Segurança e Integridade (v3.0)
+- **Criptografia CSPRNG:** Motor movido pelo módulo `secrets` do SO (sem uso de *pseudo-random* vulnerável).
+- **Blindagem SQLi e XSS:** Arquitetura 100% blindada via *Prepared Statements* no SQLite.
+- **Checksum de Arquivos:** Assinatura digital (Hash SHA-256) atestando a integridade dos arquivos Excel gerados.
 
 ---
 
 ## 🛠️ Tecnologias e Arquitetura
 
-O projeto foi construído seguindo princípios de modularização e Clean Code:
+Projeto modularizado baseado em Clean Code:
 - **Frontend:** `Streamlit` para uma UI reativa e moderna.
-- **Data Engine:** `Pandas` para processamento de matrizes e cálculos estatísticos.
-- **Storage:** `SQLite` para armazenamento persistente e rápido.
-- **Security:** Módulos nativos `hashlib` e `secrets` para compliance de segurança.
-- **API Rest:** Protocolo HTTP para consumo de dados governamentais.
+- **Data & AI Engine:** `Pandas`, `NumPy` e `Scikit-Learn` para modelagem e clusterização.
+- **Data Viz:** `Plotly` para gráficos ricos e dinâmicos.
+- **Storage:** `SQLite` nativo.
+- **File System:** `io` e `openpyxl` para manipulação em memória.
+- **Security:** `hashlib` e `secrets`.
 
 ---
 
@@ -54,15 +56,16 @@ O projeto foi construído seguindo princípios de modularização e Clean Code:
 
 ```text
 ├── app.py                # Ponto de entrada da aplicação (UI e Abas)
-├── .gitignore            # Proteção contra arquivos temporários e bancos locais
+├── .gitignore            # Proteção contra arquivos temporários e bancos
 ├── requirements.txt      # Dependências do projeto
 ├── src/                  # Núcleo da lógica de negócio
-│   ├── analyzer.py       # Algoritmos de frequência, atraso e processamento de dados
-│   ├── checker.py        # Motor de conferência de acertos contra resultados oficiais
-│   ├── collector.py      # Script de comunicação com a API e barra de progresso
-│   ├── database.py       # Esquema do banco, CRUD de apostas e gestão de tarifas
-│   └── generator.py      # Lógica matemática (CSPRNG) para geração de jogos
-└── loterias_caixa.db     # Banco de dados SQLite (Gerado automaticamente)
+│   ├── analyzer.py       # Frequência e processamento de dados
+│   ├── checker.py        # Conferência de acertos contra resultados oficiais
+│   ├── collector.py      # Comunicação com a API Caixa
+│   ├── database.py       # Esquema SQLite, CRUD e Limpeza de histórico
+│   ├── generator.py      # Motor CSPRNG com Filtros Manuais Avançados
+│   └── ml_engine.py      # Motor de Machine Learning e extração de features
+└── loterias_caixa.db     # Banco de dados (Gerado no 1º acesso)
 ⚙️ Instalação e Execução
 Preparar Ambiente:
 
@@ -83,6 +86,4 @@ Iniciar Agente:
 Bash
 streamlit run app.py
 ⚠️ Nota Legal
-Este software é uma ferramenta de análise probabilística e estudo estatístico. Ele visa auxiliar o usuário na escolha de dezenas através de dados históricos, porém não garante ganhos financeiros. Loterias são jogos de azar; jogue com responsabilidade e consciência.
-
-Desenvolvido como um agente inteligente e seguro de análise de dados. 🍀
+Ferramenta de análise probabilística e estudo estatístico e preditivo. Ela auxilia na filtragem de combinações improváveis, mas não garante ganhos financeiros, pois loterias são eventos de sorte independentes. Jogue com responsabilidade e inteligência. 🍀
