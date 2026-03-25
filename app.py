@@ -1,18 +1,18 @@
 import streamlit as st
 import pandas as pd
 import time
-import hashlib # SEGURANÇA: Importado para gerar checksums
+import hashlib
 from src.database import inicializar_bd, obter_conexao, obter_ultimo_concurso_db, atualizar_preco_banco
 from src.collector import atualizar_resultados
 from src.generator import sugerir_jogo, calcular_custo_jogos
 from src.checker import conferir_resultados
 from src.analyzer import obter_estatisticas_completas
 
-# SEGURANÇA: Helper para assinar arquivos com SHA-256 garantindo integridade
+# Função de segurança para assinar arquivos com SHA-256
 def gerar_hash_sha256(dados_bytes):
     return hashlib.sha256(dados_bytes).hexdigest()
 
-st.set_page_config(page_title="Agente IA Loterias", layout="wide")
+st.set_page_config(page_title="Agente IA Loterias", layout="wide", page_icon="🍀")
 inicializar_bd()
 
 if 'carrinho' not in st.session_state:
@@ -28,7 +28,6 @@ with st.sidebar:
     st.divider()
     with st.expander("💰 Ajustar Preços e Limites"):
         conn = obter_conexao()
-        # SEGURANÇA: Parameterized query (antes estava correto, mantido a boa prática)
         dados_t = conn.execute("SELECT preco_base, dez_max FROM tarifas WHERE loteria=?", (loteria,)).fetchone()
         conn.close()
         
@@ -54,7 +53,7 @@ with st.sidebar:
         
     st.info(f"Último Concurso: **{obter_ultimo_concurso_db(loteria)}**")
 
-# --- DEFINIÇÃO DAS 4 ABAS ---
+# --- DEFINIÇÃO DAS 4 ABAS (A LINHA QUE FALTAVA ESTÁ AQUI) ---
 tab1, tab2, tab3, tab4 = st.tabs(["🎯 Gerador", "📊 Histórico", "🏆 Conferência", "📈 Estatísticas"])
 
 # ABA 1: GERADOR & CARRINHO
@@ -68,11 +67,19 @@ with tab1:
     with c1: qtd_j = st.number_input("Qtd. Jogos:", 1, 100, 1)
     with c2: qtd_d = st.number_input(f"Dezenas ({m_min}-{m_max}):", m_min, m_max, m_min)
     
+    # CHAVE DE ATIVAÇÃO DO MACHINE LEARNING
+    usar_ia = st.toggle("🧠 Ativar Filtro de Inteligência Artificial (K-Means)", value=False, help="Treina um modelo na hora para sugerir jogos com o mesmo perfil matemático dos sorteios mais frequentes do passado.")
+    
     if st.button("➕ Gerar e Adicionar ao Carrinho", width='stretch'):
-        jogos = sugerir_jogo(loteria, qtd_j, qtd_d)
+        jogos = sugerir_jogo(loteria, qtd_j, qtd_d, usar_ia=usar_ia)
         custo_uni = calcular_custo_jogos(loteria, qtd_j, qtd_d) / qtd_j
         for j in jogos:
-            st.session_state.carrinho.append({"Loteria": loteria.upper(), "Dezenas": ", ".join(map(str, sorted(j))), "Custo Unitário": custo_uni})
+            st.session_state.carrinho.append({
+                "Loteria": loteria.upper(), 
+                "Dezenas": ", ".join(map(str, sorted(j))), 
+                "Custo Unitário": custo_uni,
+                "IA": "🤖 Sim" if usar_ia else "Aleatório"
+            })
         st.rerun()
 
     if st.session_state.carrinho:
@@ -83,12 +90,12 @@ with tab1:
             st.dataframe(df_c, width='stretch', hide_index=True)
             st.metric("Total", f"R$ {df_c['Custo Unitário'].sum():.2f}")
         with col_c2:
-            # SEGURANÇA: Download Seguro com Hash SHA-256
+            # Download Seguro com Hash SHA-256
             csv_dados = df_c.to_csv(index=False).encode('utf-8')
             hash_arquivo = gerar_hash_sha256(csv_dados)
             
             st.download_button("📥 Baixar Lista (CSV)", csv_dados, "meus_jogos.csv", "text/csv", width='stretch')
-            st.caption(f"🔒 SHA-256: `{hash_arquivo[:12]}...`") # Exibição truncada para não quebrar layout
+            st.caption(f"🔒 SHA-256: `{hash_arquivo[:12]}...`")
             
             if st.button("🗑️ Limpar Carrinho", width='stretch'):
                 st.session_state.carrinho = []; st.rerun()
@@ -102,7 +109,6 @@ with tab1:
 # ABA 2: HISTÓRICO
 with tab2:
     conn = obter_conexao()
-    # SEGURANÇA: Uso de parâmetros parametrizados do Pandas para eliminar risco de SQLi
     df_h = pd.read_sql_query("SELECT id_concurso as Concurso, data_sorteio as Data, dezenas as Números FROM resultados WHERE loteria = ? ORDER BY id_concurso DESC", conn, params=(loteria,))
     conn.close()
     if not df_h.empty: st.dataframe(df_h, width='stretch', hide_index=True)
@@ -110,7 +116,6 @@ with tab2:
 # ABA 3: CONFERÊNCIA
 with tab3:
     conn = obter_conexao()
-    # VULNERABILIDADE CORRIGIDA AQUI: Remoção completa do f-string no SELECT.
     df_p = pd.read_sql_query("SELECT concurso_alvo as Concurso, dezenas_jogadas as 'Suas Dezenas' FROM apostas_usuario WHERE loteria = ? ORDER BY id DESC", conn, params=(loteria,))
     conn.close()
     if not df_p.empty:
