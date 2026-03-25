@@ -39,19 +39,25 @@ def sugerir_jogo(loteria, qtd_jogos, dezenas_por_jogo, usar_ia=False,
     offset = 0 if loteria == "lotomania" else 1
     pool_de_numeros = list(range(offset, max_num + 1))
     
-    # Mapeamento da Grade (Grid) do volante para Linhas, Colunas e Moldura
+    # --- OTIMIZAÇÃO DE ALTA PERFORMANCE (PRÉ-CÁLCULO) ---
+    # Ao invés de calcular isso milhares de vezes dentro do loop, calculamos 1 vez só usando Sets (O(1))
+    SET_PARES = {n for n in pool_de_numeros if n % 2 == 0}
+    SET_PRIMOS = {n for n in pool_de_numeros if eh_primo(n)}
+    SET_MULT3 = {n for n in pool_de_numeros if n > 0 and n % 3 == 0}
+    
     cols = 5 if loteria == "lotofacil" else 10
     rows = max_num // cols if loteria != "lotomania" else 10
 
     def get_grid_pos(n):
-        # Lotomania trata o 00 como posição 100 no volante
         val = 100 if n == 0 and loteria == "lotomania" else n
-        r = (val - 1) // cols
-        c = (val - 1) % cols
-        return r, c
+        return (val - 1) // cols, (val - 1) % cols
 
     def is_moldura(r, c):
         return r == 0 or r == rows - 1 or c == 0 or c == cols - 1
+
+    # Pré-mapeia a grade inteira para consultas instantâneas
+    MAPA_GRID = {n: get_grid_pos(n) for n in pool_de_numeros}
+    SET_MOLDURA = {n for n in pool_de_numeros if is_moldura(*MAPA_GRID[n])}
 
     ultimo_sorteio = obter_ultimo_sorteio(loteria)
     gerador_seguro = secrets.SystemRandom()
@@ -66,27 +72,27 @@ def sugerir_jogo(loteria, qtd_jogos, dezenas_por_jogo, usar_ia=False,
 
     for _ in range(qtd_jogos):
         tentativas = 0
-        tentativas_maximas = 5000  # Aumentado devido à rigidez de 8 filtros combinados
+        tentativas_maximas = 5000  
         jogo_valido = False
         
         while tentativas < tentativas_maximas:
             jogo = gerador_seguro.sample(pool_de_numeros, k=dezenas_por_jogo)
             jogo.sort()
             
-            # --- 1. Filtros Matemáticos e Quantitativos ---
+            # --- 1. Filtros Matemáticos e Quantitativos Otimizados ---
             if not (filtro_soma[0] <= sum(jogo) <= filtro_soma[1]):
                 tentativas += 1; continue
 
-            if not (filtro_pares[0] <= sum(1 for n in jogo if n % 2 == 0) <= filtro_pares[1]):
+            if not (filtro_pares[0] <= sum(1 for n in jogo if n in SET_PARES) <= filtro_pares[1]):
                 tentativas += 1; continue
 
-            if not (filtro_primos[0] <= sum(1 for n in jogo if eh_primo(n)) <= filtro_primos[1]):
+            if not (filtro_primos[0] <= sum(1 for n in jogo if n in SET_PRIMOS) <= filtro_primos[1]):
                 tentativas += 1; continue
                 
             if not (filtro_fibo[0] <= sum(1 for n in jogo if n in FIBONACCI) <= filtro_fibo[1]):
                 tentativas += 1; continue
                 
-            if not (filtro_mult3[0] <= sum(1 for n in jogo if n > 0 and n % 3 == 0) <= filtro_mult3[1]):
+            if not (filtro_mult3[0] <= sum(1 for n in jogo if n in SET_MULT3) <= filtro_mult3[1]):
                 tentativas += 1; continue
                 
             # --- 2. Filtro de Repetidas do Concurso Anterior ---
@@ -95,16 +101,17 @@ def sugerir_jogo(loteria, qtd_jogos, dezenas_por_jogo, usar_ia=False,
                 if not (filtro_repetidas[0] <= repetidas <= filtro_repetidas[1]):
                     tentativas += 1; continue
 
-            # --- 3. Filtros Espaciais (Geometria do Volante) ---
-            moldura_count = 0
+            # --- 3. Filtros Espaciais Otimizados ---
+            moldura_count = sum(1 for n in jogo if n in SET_MOLDURA)
+            if not (filtro_moldura[0] <= moldura_count <= filtro_moldura[1]):
+                tentativas += 1; continue
+                
             linhas_count = {}
             colunas_count = {}
             grid_invalido = False
 
             for n in jogo:
-                r, c = get_grid_pos(n)
-                if is_moldura(r, c): moldura_count += 1
-                
+                r, c = MAPA_GRID[n]
                 linhas_count[r] = linhas_count.get(r, 0) + 1
                 colunas_count[c] = colunas_count.get(c, 0) + 1
                 
@@ -112,7 +119,7 @@ def sugerir_jogo(loteria, qtd_jogos, dezenas_por_jogo, usar_ia=False,
                     grid_invalido = True
                     break
                     
-            if grid_invalido or not (filtro_moldura[0] <= moldura_count <= filtro_moldura[1]):
+            if grid_invalido:
                 tentativas += 1; continue
                 
             # --- 4. Filtro Básico de Sequências ---
@@ -136,7 +143,6 @@ def sugerir_jogo(loteria, qtd_jogos, dezenas_por_jogo, usar_ia=False,
                 
             tentativas += 1
             
-        # Circuit Breaker: Entrega aleatório se filtros forem impossíveis
         if not jogo_valido:
             jogo_fallback = gerador_seguro.sample(pool_de_numeros, k=dezenas_por_jogo)
             jogo_fallback.sort()
