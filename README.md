@@ -66,25 +66,3 @@ Projeto modularizado baseado em Clean Code:
 │   ├── generator.py      # Motor CSPRNG com Filtros Manuais Avançados
 │   └── ml_engine.py      # Motor de Machine Learning e extração de features
 └── loterias_caixa.db     # Banco de dados (Gerado no 1º acesso)
-⚙️ Instalação e Execução
-Preparar Ambiente:
-
-Bash
-python -m venv venv
-
-# No Linux/Mac:
-source venv/bin/activate
-
-# No Windows:
-.\venv\Scripts\activate
-Instalar Dependências:
-
-Bash
-pip install -r requirements.txt
-Iniciar Agente:
-
-Bash
-streamlit run app.py
-
-⚠️ Nota Legal
-Ferramenta de análise probabilística e estudo estatístico e preditivo. Ela auxilia na filtragem de combinações improváveis, mas não garante ganhos financeiros, pois loterias são eventos de sorte independentes. Jogue com responsabilidade e inteligência. 🍀
