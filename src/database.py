@@ -71,3 +71,12 @@ def atualizar_preco_banco(loteria, preco, dez_max):
     conn.execute("UPDATE tarifas SET preco_base = ?, dez_max = ? WHERE loteria = ?", (preco, dez_max, loteria))
     conn.commit()
     conn.close()
+
+def limpar_apostas_banco(loteria):
+    """
+    Remove todas as apostas salvas pelo usuário para uma loteria específica.
+    """
+    conn = obter_conexao()
+    conn.execute("DELETE FROM apostas_usuario WHERE loteria = ?", (loteria,))
+    conn.commit()
+    conn.close()
