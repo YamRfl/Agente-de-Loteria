@@ -2,57 +2,44 @@ import pandas as pd
 from .database import obter_conexao
 
 def conferir_resultados(loteria):
-    """
-    Compara as apostas registradas pelo usuário com o banco oficial da Caixa.
-    """
     conn = obter_conexao()
     
-    # SEGURANÇA: Prevenção absoluta de SQL Injection utilizando query parametrizada.
-    query_apostas = "SELECT concurso_alvo, dezenas_jogadas FROM apostas_usuario WHERE loteria = ?"
-    apostas_df = pd.read_sql_query(query_apostas, conn, params=(loteria,))
-    
-    if apostas_df.empty:
-        conn.close()
+    apostas = pd.read_sql_query("SELECT concurso_alvo, dezenas_jogadas FROM apostas_usuario WHERE loteria = ?", conn, params=(loteria,))
+    resultados = pd.read_sql_query("SELECT id_concurso, dezenas FROM resultados WHERE loteria = ?", conn, params=(loteria,))
+    conn.close()
+
+    if apostas.empty or resultados.empty:
         return None
 
-    resultados_formatados = []
+    resultados['dezenas_set'] = resultados['dezenas'].apply(lambda x: set(int(d) for d in x.split(',')))
     
-    # Itera sobre os jogos salvos do usuário
-    for _, aposta in apostas_df.iterrows():
+    conferencias = []
+    
+    for _, aposta in apostas.iterrows():
         concurso = aposta['concurso_alvo']
-        # Converte a string salva "01, 02, 03" para um Set de inteiros para comparação rápida
-        dezenas_jogadas_set = set(map(int, aposta['dezenas_jogadas'].replace(' ', '').split(',')))
+        dezenas_jogadas = set(int(d) for d in str(aposta['dezenas_jogadas']).split(','))
         
-        # SEGURANÇA: Novamente, uso rigoroso de parâmetros (?, ?) para o SELECT interno
-        query_oficial = "SELECT dezenas FROM resultados WHERE loteria = ? AND id_concurso = ?"
-        resultado_oficial_df = pd.read_sql_query(query_oficial, conn, params=(loteria, concurso))
+        resultado_oficial = resultados[resultados['id_concurso'] == concurso]
         
-        if not resultado_oficial_df.empty:
-            # Converte as dezenas sorteadas para um Set
-            sorteio_oficial_str = resultado_oficial_df.iloc[0]['dezenas']
-            dezenas_oficiais_set = set(map(int, sorteio_oficial_str.split(',')))
+        if not resultado_oficial.empty:
+            dezenas_oficiais = resultado_oficial.iloc[0]['dezenas_set']
+            acertos = dezenas_jogadas.intersection(dezenas_oficiais)
+            qtd_acertos = len(acertos)
             
-            # Cálculo de Intersecção (Acertos)
-            acertos = dezenas_jogadas_set.intersection(dezenas_oficiais_set)
-            
-            resultados_formatados.append({
+            conferencias.append({
                 "Concurso": concurso,
-                "Seu Jogo": aposta['dezenas_jogadas'],
-                "Sorteio Oficial": sorteio_oficial_str,
-                "Acertos (Qtd)": len(acertos),
-                "Números Acertados": ", ".join(map(str, sorted(acertos))) if acertos else "Nenhum acerto"
+                "Suas Dezenas": ", ".join(str(d) for d in sorted(dezenas_jogadas)),
+                "Sorteio Oficial": ", ".join(str(d) for d in sorted(dezenas_oficiais)),
+                "Qtd. Acertos": qtd_acertos,
+                "Dezenas Acertadas": ", ".join(str(d) for d in sorted(acertos)) if qtd_acertos > 0 else "-"
             })
         else:
-            # Caso o concurso alvo do usuário ainda não tenha sido sorteado/baixado
-            resultados_formatados.append({
+             conferencias.append({
                 "Concurso": concurso,
-                "Seu Jogo": aposta['dezenas_jogadas'],
-                "Sorteio Oficial": "Sorteio Pendente",
-                "Acertos (Qtd)": "-",
-                "Números Acertados": "-"
+                "Suas Dezenas": ", ".join(str(d) for d in sorted(dezenas_jogadas)),
+                "Sorteio Oficial": "Aguardando Sorteio",
+                "Qtd. Acertos": "-",
+                "Dezenas Acertadas": "-"
             })
 
-    conn.close()
-    
-    # Retorna o DataFrame que o Streamlit irá renderizar na tela
-    return pd.DataFrame(resultados_formatados)
+    return pd.DataFrame(conferencias)

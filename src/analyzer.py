@@ -2,19 +2,14 @@ import pandas as pd
 from .database import obter_conexao
 
 def carregar_dados(loteria):
-    """
-    SEGURANÇA: Utilização de params=(loteria,) no Pandas para delegar a sanitização ao DB-API.
-    """
     conn = obter_conexao()
     df = pd.read_sql_query(
         "SELECT dezenas FROM resultados WHERE loteria = ? ORDER BY id_concurso DESC LIMIT 50", 
         conn, params=(loteria,)
     )
     conn.close()
-
     if not df.empty:
         df['dezenas_list'] = df['dezenas'].apply(lambda x: [int(d) for d in x.split(',')])
-    
     return df
 
 def obter_estatisticas_completas(loteria):
@@ -40,7 +35,8 @@ def obter_estatisticas_completas(loteria):
 
     max_num = {
         "megasena": 60, "lotofacil": 25, "quina": 80,
-        "lotomania": 99, "duplasena": 50, "timemania": 80
+        "lotomania": 99, "duplasena": 50, "timemania": 80,
+        "maismilionaria": 50, "diadesorte": 31
     }.get(loteria, 60)
     
     atraso_lista = []
@@ -48,8 +44,7 @@ def obter_estatisticas_completas(loteria):
     range_inicio = 0 if loteria == "lotomania" else 1
 
     for i in range(range_inicio, max_num + 1):
-        num_str = str(i).zfill(2)
-        # SEGURANÇA: Regex controlada internamente, impossível ser injetada pelo usuário
+        num_str = str(i).zfill(2) if loteria == "lotomania" else str(i)
         sub_df = df[df['dezenas'].str.contains(fr'\b{num_str}\b', regex=True)]
         
         if not sub_df.empty:
