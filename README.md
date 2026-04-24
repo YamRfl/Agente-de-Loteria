@@ -56,7 +56,7 @@ ADMIN_SENHA=To100senha
 Passo 3: Inicialização Crítica
 Se você estiver vindo de uma versão anterior, delete o arquivo loterias_caixa.db para que o sistema crie as novas tabelas de segurança (Tokens de E-mail) e o novo usuário Admin.
 
-📁 4. Estrutura de Pastas do Projeto
+## 📁 4. Estrutura de Pastas do Projeto
 Plaintext
 Agente-de-Loteria/
 ├── run.bat               # Atalho de inicialização rápida
@@ -76,12 +76,12 @@ Agente-de-Loteria/
     ├── checker.py        # Conferência de apostas vs resultados
     └── ml_engine.py      # Algoritmos de Machine Learning (K-Means)
 
-📊 5. Funcionalidades de Inteligência Artificial
+## 📊 5. Funcionalidades de Inteligência Artificial
 K-Means Clustering: Agrupa resultados históricos para identificar padrões de sorteio.
 
 DNA Matemático: Filtra jogos baseando-se em Soma, Primos, Fibonacci, Moldura e Múltiplos.
 
 Paywall VIP: Recursos avançados de IA são exclusivos para usuários com chave de licença ativa.
 
-📄 Licença
+## 📄 Licença
 Distribuído sob a licença MIT. Uso livre para fins acadêmicos e pessoais.
