@@ -8,15 +8,51 @@ import plotly.express as px
 import io  
 
 from src.database import inicializar_bd, obter_conexao, obter_ultimo_concurso_db, atualizar_preco_banco, limpar_apostas_banco
-from src.collector import atualizar_resultados
+from src.collector import atualizar_resultados, sincronizar_todas_loterias
 from src.generator import sugerir_jogo, calcular_custo_jogos
 from src.checker import conferir_resultados
 from src.analyzer import obter_estatisticas_completas
 from src.auth import (inicializar_bd_auth, registrar_usuario, autenticar_usuario, 
                       simular_pagamento_e_liberar_licenca, listar_todos_usuarios,
-                      alterar_senha_usuario, redefinir_senha_esquecida)
+                      alterar_senha_usuario, solicitar_token_recuperacao, redefinir_senha_com_token)
 
 st.set_page_config(page_title="Agente IA Loterias - SaaS", layout="wide", page_icon="🍀")
+
+# ==========================================
+# INJEÇÃO ESTÉTICA (CSS) - REDUÇÃO DE ESPAÇOS SEM ALTERAR CÓDIGO
+# ==========================================
+st.markdown("""
+<style>
+    /* Reduz o topo da barra lateral */
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    /* Encolhe os botões globalmente */
+    .stButton>button {
+        min-height: 2rem;
+        padding-top: 0.2rem !important;
+        padding-bottom: 0.2rem !important;
+    }
+    /* Reduz o espaçamento do divisor (hr) em 30% */
+    [data-testid="stSidebar"] hr {
+        margin-top: 0.8rem !important;
+        margin-bottom: 0.8rem !important;
+    }
+    /* Garante barra de rolagem visual caso a tela seja muito pequena */
+    [data-testid="stSidebar"] > div:first-child {
+        overflow-y: auto !important;
+    }
+    [data-testid="stSidebar"] > div:first-child::-webkit-scrollbar {
+        width: 6px;
+        background-color: transparent;
+    }
+    [data-testid="stSidebar"] > div:first-child::-webkit-scrollbar-thumb {
+        background-color: rgba(120, 120, 120, 0.4);
+        border-radius: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 inicializar_bd()
 inicializar_bd_auth()
@@ -42,19 +78,68 @@ def carregar_apostas_cacheadas(loteria):
     conn.close()
     return df
 
-st.title("🍀 Agente de IA - Analista de Loterias")
+# ==========================================
+# CABEÇALHO COM BOTÃO "SAIR" NO CANTO SUPERIOR DIREITO
+# ==========================================
+col_titulo, col_sair = st.columns([8, 2])
+with col_titulo:
+    st.title("🍀 Agente de IA - Analista de Loterias")
+with col_sair:
+    if st.session_state.logged_in:
+        # Espaçamento para alinhar o botão com o meio do título
+        st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
+        if st.button("🚪 Sair da Conta", type="secondary", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.user = None
+            st.rerun()
 
 with st.sidebar:
-    st.header("🔐 Área do Usuário")
+    # ==========================================
+    # 1. CONTROLE GLOBAL (Topo)
+    # ==========================================
+    st.subheader("⚙️ Seleção de Loteria")
+    loteria = st.selectbox("Modalidade", ["megasena", "lotofacil", "quina", "lotomania", "duplasena", "timemania", "maismilionaria", "diadesorte"], label_visibility="collapsed", help="Escolha a loteria.")
+    
+    prog_place = st.empty()
+    status_text = st.empty()
+    
+    col_sync1, col_sync2 = st.columns(2)
+    with col_sync1:
+        if st.button("🔄 Atual", type="primary", use_container_width=True, help="Sincroniza apenas a loteria selecionada na caixa acima."):
+            try:
+                atualizar_resultados(loteria, barra_progresso=prog_place.progress(0))
+                st.cache_data.clear(); prog_place.empty()
+                st.toast(f"Resultados da {loteria.upper()} atualizados!", icon="✅")
+                time.sleep(1); st.rerun()
+            except Exception:
+                st.error("Conexão interrompida.")
+                
+    with col_sync2:
+        if st.button("⚡ TODAS", type="secondary", use_container_width=True, help="Baixa todas as 8 loterias em Lote."):
+            try:
+                sincronizar_todas_loterias(barra_progresso=prog_place.progress(0), texto_status=status_text)
+                st.cache_data.clear(); prog_place.empty(); status_text.empty()
+                st.toast("Banco de dados sincronizado!", icon="🚀")
+                time.sleep(1); st.rerun()
+            except Exception:
+                st.error("Conexão interrompida.")
+            
+    st.caption(f"Último Concurso Sincronizado: **{obter_ultimo_concurso_db(loteria)}**")
+    
+    st.divider()
+
+    # ==========================================
+    # 2. ÁREA DO USUÁRIO (Base)
+    # ==========================================
+    st.subheader("🔐 Área do Usuário")
     
     if not st.session_state.logged_in:
-        st.info("Versão Gratuita. Crie uma conta para adquirir a licença VIP e desbloquear a IA.")
-        tab_log, tab_cad, tab_rec = st.tabs(["Entrar", "Criar Conta", "Esqueci a Senha"])
+        tab_log, tab_cad, tab_rec = st.tabs(["Entrar", "Criar Conta", "Recuperar"])
         
         with tab_log:
             with st.form("form_login"):
-                log_email = st.text_input("E-mail")
-                log_senha = st.text_input("Senha", type="password")
+                log_email = st.text_input("E-mail", placeholder="E-mail de acesso", label_visibility="collapsed")
+                log_senha = st.text_input("Senha", type="password", placeholder="Sua senha", label_visibility="collapsed")
                 submit_log = st.form_submit_button("Acessar Plataforma", type="primary", use_container_width=True)
                 if submit_log:
                     sucesso, resposta = autenticar_usuario(log_email, log_senha)
@@ -62,82 +147,91 @@ with st.sidebar:
                         st.session_state.logged_in = True
                         st.session_state.user = resposta
                         st.rerun()
-                    else: st.error(resposta)
+                    else: 
+                        st.error(resposta)
                     
         with tab_cad:
             with st.form("form_cadastro", clear_on_submit=True):
-                cad_nome = st.text_input("Nome Completo")
-                cad_email = st.text_input("E-mail", help="Seu e-mail principal (ex: nome@dominio.com)")
-                cad_senha = st.text_input("Senha", type="password", help="Mínimo 8 caracteres, contendo 1 letra maiúscula, 1 minúscula e 1 número.")
-                submit_cad = st.form_submit_button("Cadastrar", use_container_width=True)
+                cad_nome = st.text_input("Nome Completo", placeholder="Nome Completo", label_visibility="collapsed")
+                cad_email = st.text_input("E-mail", placeholder="E-mail (ex: nome@dominio.com)", label_visibility="collapsed")
+                cad_senha = st.text_input("Senha", type="password", placeholder="Senha Forte (Mín. 8 chars)", label_visibility="collapsed")
+                submit_cad = st.form_submit_button("Cadastrar Conta", use_container_width=True)
                 if submit_cad:
                     sucesso, msg = registrar_usuario(cad_nome, cad_email, cad_senha)
-                    st.success(msg) if sucesso else st.error(msg)
+                    if sucesso:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
                     
         with tab_rec:
-            st.caption("Recupere o acesso à sua conta.")
-            with st.form("form_recuperar", clear_on_submit=True):
-                rec_email = st.text_input("E-mail cadastrado")
-                rec_senha = st.text_input("Nova Senha", type="password", help="Nova senha com regras de segurança.")
-                submit_rec = st.form_submit_button("Redefinir Senha", use_container_width=True)
+            # Fluxo 1: Solicitar o E-mail
+            with st.form("form_pedir_token"):
+                st.caption("1º Passo: Solicite o código")
+                req_email = st.text_input("E-mail", placeholder="Digite seu e-mail", label_visibility="collapsed")
+                submit_req = st.form_submit_button("✉️ Receber Código", use_container_width=True)
+                if submit_req:
+                    with st.spinner("Enviando..."):
+                        suc_req, msg_req = solicitar_token_recuperacao(req_email)
+                        if suc_req:
+                            st.success(msg_req)
+                        else:
+                            st.error(msg_req)
+            
+            # Fluxo 2: Redefinir a Senha
+            with st.form("form_redefinir_senha", clear_on_submit=True):
+                st.caption("2º Passo: Digite o código e a senha")
+                rec_email = st.text_input("Confirmar E-mail", placeholder="Confirme seu e-mail", label_visibility="collapsed")
+                rec_token = st.text_input("Código", placeholder="Código de 6 dígitos", label_visibility="collapsed")
+                rec_senha = st.text_input("Nova Senha", type="password", placeholder="Nova Senha Forte", label_visibility="collapsed")
+                submit_rec = st.form_submit_button("Salvar Nova Senha", type="primary", use_container_width=True)
                 if submit_rec:
-                    sucesso, msg = redefinir_senha_esquecida(rec_email, rec_senha)
-                    st.success(msg) if sucesso else st.error(msg)
+                    suc_rec, msg_rec = redefinir_senha_com_token(rec_email, rec_token, rec_senha)
+                    if suc_rec:
+                        st.success(msg_rec)
+                    else:
+                        st.error(msg_rec)
     else:
-        st.success(f"Bem-vindo(a), {st.session_state.user['nome'].split()[0]}!")
+        st.success(f"Olá, {st.session_state.user['nome'].split()[0]}!")
         is_premium = st.session_state.user.get('licenca') is not None
         
         if is_premium:
             st.info("💎 Status: **Assinante VIP**")
-            st.caption(f"Licença: `{st.session_state.user['licenca'].split('-')[0]}...`")
         else:
             st.warning("Plano: **Gratuito**")
-            st.divider()
-            st.markdown("🚀 **Desbloqueie a IA!**")
             if st.button("💳 Simular Pagamento", type="primary", use_container_width=True):
                 with st.spinner("Processando..."):
                     time.sleep(2)
                     st.session_state.user['licenca'] = simular_pagamento_e_liberar_licenca(st.session_state.user['email'])
-                st.balloons(); st.rerun()
+                st.balloons()
+                st.rerun()
                 
-        with st.expander("⚙️ Alterar Senha"):
+        with st.expander("👤 Configurações da Conta"):
             with st.form("form_alt_senha", clear_on_submit=True):
-                alt_senha_antiga = st.text_input("Senha Atual", type="password")
-                alt_senha_nova = st.text_input("Nova Senha", type="password")
+                alt_senha_antiga = st.text_input("Senha Atual", type="password", placeholder="Senha atual", label_visibility="collapsed")
+                alt_senha_nova = st.text_input("Nova Senha", type="password", placeholder="Nova senha forte", label_visibility="collapsed")
                 submit_alt = st.form_submit_button("Atualizar Senha", use_container_width=True)
                 if submit_alt:
                     suc, msg_alt = alterar_senha_usuario(st.session_state.user['email'], alt_senha_antiga, alt_senha_nova)
-                    st.success(msg_alt) if suc else st.error(msg_alt)
+                    if suc:
+                        st.success(msg_alt)
+                    else:
+                        st.error(msg_alt)
 
-        if st.button("Sair (Logout)", use_container_width=True):
-            st.session_state.logged_in = False; st.session_state.user = None; st.rerun()
+            if st.button("Sair (Logout)", use_container_width=True):
+                st.session_state.logged_in = False
+                st.session_state.user = None
+                st.rerun()
 
-    st.divider()
-    st.header("⚙️ Loterias")
-    loteria = st.selectbox("Modalidade:", ["megasena", "lotofacil", "quina", "lotomania", "duplasena", "timemania", "maismilionaria", "diadesorte"], help="Escolha o jogo que deseja analisar e apostar.")
-    
-    prog_place = st.empty()
-    if st.button("🔄 Sincronizar Sorteios", type="primary", use_container_width=True):
-        try:
-            atualizar_resultados(loteria, barra_progresso=prog_place.progress(0))
-            st.cache_data.clear(); prog_place.empty()
-            st.toast(f"Resultados da {loteria.upper()} atualizados com sucesso!", icon="✅")
-            time.sleep(1)
-            st.rerun()
-        except Exception as e:
-            st.error("A conexão com a Caixa foi interrompida.")
-            
-    # RESTAURAÇÃO DA FRASE DE AVISO
-    st.caption("⚠️ **Aviso:** Se a atualização travar ou a tela ficar em branco, pressione **F5** (ou recarregue a página) para continuar.")
-    st.info(f"Último Concurso: **{obter_ultimo_concurso_db(loteria)}**")
-    
     with st.expander("♿ Acessibilidade e Ajuda"):
         st.markdown("""
-        * **Contraste:** O sistema se adapta ao tema (Claro/Escuro) do seu Windows ou navegador.
-        * **Dicas:** Posicione o mouse sobre os campos e ícones `?` para obter ajuda técnica.
-        * **Zoom:** Utilize `Ctrl +` ou `Ctrl -` no teclado para ajustar o tamanho da fonte.
+        * **Contraste:** O sistema se adapta ao tema do seu Windows.
+        * **Dicas:** Passe o mouse sobre os ícones `?`.
+        * **Zoom:** Utilize `Ctrl +` ou `Ctrl -` no teclado.
         """)
 
+# ==========================================
+# ABAS PRINCIPAIS DO SISTEMA
+# ==========================================
 tabs_names = ["🎯 Gerador (Free/VIP)", "📊 Histórico", "🏆 Conferência", "📈 Estatísticas"]
 is_admin = st.session_state.logged_in and st.session_state.user['role'] == 'admin'
 if is_admin: tabs_names.append("🛡️ Painel Admin")
@@ -179,12 +273,15 @@ with tabs[0]:
         limite_pares = (0, m_max); limite_mult3 = (0, m_max); limite_primos = (0, m_max)
         limite_moldura = (0, m_max); max_linha = 10; max_coluna = 10; usar_ia = False
 
+    custo_previsto = calcular_custo_jogos(loteria, qtd_j, qtd_d)
+    st.markdown(f"💰 **Custo Estimado da Aposta:** R$ {custo_previsto:.2f}")
+
     if st.button("➕ Adicionar ao Carrinho", type="primary", use_container_width=True):
         jogos = sugerir_jogo(loteria, qtd_j, qtd_d, usar_ia=usar_ia, filtro_soma=limite_soma, 
                              filtro_pares=limite_pares, filtro_primos=limite_primos, filtro_fibo=limite_fibo, 
                              filtro_mult3=limite_mult3, filtro_moldura=limite_moldura, filtro_repetidas=limite_repetidas, 
                              limite_linha=max_linha, limite_coluna=max_coluna)
-        custo_uni = calcular_custo_jogos(loteria, qtd_j, qtd_d) / qtd_j
+        custo_uni = custo_previsto / qtd_j if qtd_j > 0 else 0
         for j in jogos:
             st.session_state.carrinho.append({"Loteria": loteria.upper(), "Dezenas": ", ".join(map(str, sorted(j))), "Custo Unitário": custo_uni, "IA / Filtros": "💎 VIP" if usar_ia or usuario_premium else "Aleatório (Free)"})
         st.rerun()
@@ -204,27 +301,34 @@ with tabs[0]:
             
             if usuario_premium:
                 st.download_button(
-                    label="📥 Baixar em Excel", data=excel_dados, 
+                    label="📥 Baixar Excel", data=excel_dados, 
                     file_name="meus_jogos.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                     use_container_width=True
                 )
             else:
                 st.button("🔒 Baixar Excel (VIP)", disabled=True, use_container_width=True)
             
-            if st.button("🗑️ Limpar Carrinho", use_container_width=True): st.session_state.carrinho = []; st.rerun()
+            if st.button("🗑️ Limpar Carrinho", use_container_width=True): 
+                st.session_state.carrinho = []
+                st.rerun()
                 
-        if st.button("💾 CONFIRMAR E SALVAR NO BANCO PARA CONFERÊNCIA", use_container_width=True):
-            conn = obter_conexao(); prox = obter_ultimo_concurso_db(loteria) + 1
+        if st.button("💾 SALVAR NO BANCO PARA CONFERÊNCIA", use_container_width=True):
+            conn = obter_conexao()
+            prox = obter_ultimo_concurso_db(loteria) + 1
             for _, r in df_c.iterrows():
                 conn.execute("INSERT INTO apostas_usuario (loteria, concurso_alvo, dezenas_jogadas) VALUES (?,?,?)", (r["Loteria"].lower(), prox, r["Dezenas"].replace(" ", "")))
-            conn.commit(); conn.close()
-            st.cache_data.clear(); st.session_state.carrinho = []
+            conn.commit()
+            conn.close()
+            st.cache_data.clear()
+            st.session_state.carrinho = []
             st.toast("Apostas guardadas com segurança no banco de dados!", icon="💾")
-            time.sleep(1); st.rerun()
+            time.sleep(1)
+            st.rerun()
 
 with tabs[1]:
     df_h = carregar_historico_cacheados(loteria)
-    if not df_h.empty: st.dataframe(df_h, use_container_width=True, hide_index=True)
+    if not df_h.empty: 
+        st.dataframe(df_h, use_container_width=True, hide_index=True)
 
 with tabs[2]:
     df_p = carregar_apostas_cacheadas(loteria)
@@ -240,7 +344,9 @@ with tabs[2]:
                         st.balloons()
         with c_conf2:
             if st.button("🗑️ Apagar Histórico", use_container_width=True):
-                limpar_apostas_banco(loteria); st.cache_data.clear(); st.rerun()
+                limpar_apostas_banco(loteria)
+                st.cache_data.clear()
+                st.rerun()
     else:
         st.info("Você ainda não tem jogos salvos para esta loteria.")
 
@@ -251,11 +357,15 @@ with tabs[3]:
         modo_visao = st.radio("Visão:", ["📊 Gráficos (Top 20)", "📝 Tabelas Completas"], horizontal=True, label_visibility="collapsed")
         c_est1, c_est2 = st.columns(2)
         if "Gráficos" in modo_visao:
-            with c_est1: st.plotly_chart(px.bar(df_freq.head(20).astype({'Número': str}), x='Número', y='Sorteios', title="Frequência (Mais Sorteados)", color='Sorteios', color_continuous_scale='Blues'), use_container_width=True)
-            with c_est2: st.plotly_chart(px.bar(df_atraso.head(20).astype({'Número': str}), x='Número', y='Atraso', title="Atrasos (Mais Tempo Sem Sair)", color='Atraso', color_continuous_scale='Oranges'), use_container_width=True)
+            with c_est1: 
+                st.plotly_chart(px.bar(df_freq.head(20).astype({'Número': str}), x='Número', y='Sorteios', title="Frequência (Mais Sorteados)", color='Sorteios', color_continuous_scale='Blues'), use_container_width=True)
+            with c_est2: 
+                st.plotly_chart(px.bar(df_atraso.head(20).astype({'Número': str}), x='Número', y='Atraso', title="Atrasos (Mais Tempo Sem Sair)", color='Atraso', color_continuous_scale='Oranges'), use_container_width=True)
         else:
-            with c_est1: st.dataframe(df_freq.style.format(precision=2).bar(subset=['Sorteios'], color='#1f77b4'), use_container_width=True, hide_index=True)
-            with c_est2: st.dataframe(df_atraso.style.format(precision=2).background_gradient(subset=['Atraso'], cmap='Oranges'), use_container_width=True, hide_index=True)
+            with c_est1: 
+                st.dataframe(df_freq.style.format(precision=2).bar(subset=['Sorteios'], color='#1f77b4'), use_container_width=True, hide_index=True)
+            with c_est2: 
+                st.dataframe(df_atraso.style.format(precision=2).background_gradient(subset=['Atraso'], cmap='Oranges'), use_container_width=True, hide_index=True)
 
 if is_admin:
     with tabs[4]:
@@ -278,3 +388,5 @@ if is_admin:
                 atualizar_preco_banco(loteria, novo_preco, nova_dez_max)
                 st.cache_data.clear() 
                 st.success("Tarifas do sistema atualizadas e aplicadas para todos os usuários!")
+                time.sleep(1) 
+                st.rerun()
