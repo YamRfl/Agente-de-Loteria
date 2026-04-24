@@ -75,25 +75,13 @@ Agente-de-Loteria/
     ├── analyzer.py       # Dashboards Estatísticos (Plotly)
     ├── checker.py        # Conferência de apostas vs resultados
     └── ml_engine.py      # Algoritmos de Machine Learning (K-Means)
+
 📊 5. Funcionalidades de Inteligência Artificial
 K-Means Clustering: Agrupa resultados históricos para identificar padrões de sorteio.
 
 DNA Matemático: Filtra jogos baseando-se em Soma, Primos, Fibonacci, Moldura e Múltiplos.
 
 Paywall VIP: Recursos avançados de IA são exclusivos para usuários com chave de licença ativa.
-
-🏷️ 6. Manual de Deploy e Versionamento (Git)
-Para manter o projeto atualizado e seguro no repositório:
-
-Verificar: git status
-
-Adicionar: git add .
-
-Commit: git commit -m "release: v6.0.0 - Full SaaS Architecture"
-
-Tag: git tag -a v6.0.0 -m "Versão 6 Oficial"
-
-Push: git push origin main --tags
 
 📄 Licença
 Distribuído sob a licença MIT. Uso livre para fins acadêmicos e pessoais.
