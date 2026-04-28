@@ -6,8 +6,9 @@ env/
 .env
 
 # Banco de Dados Local
-loterias_caixa.db
+*.db
 *.sqlite3
+loterias_caixa.db
 
 # Arquivos temporários do Python
 __pycache__/

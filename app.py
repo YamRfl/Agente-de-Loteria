@@ -14,12 +14,13 @@ from src.checker import conferir_resultados
 from src.analyzer import obter_estatisticas_completas
 from src.auth import (inicializar_bd_auth, registrar_usuario, autenticar_usuario, 
                       simular_pagamento_e_liberar_licenca, listar_todos_usuarios,
-                      alterar_senha_usuario, solicitar_token_recuperacao, redefinir_senha_com_token)
+                      alterar_senha_usuario, solicitar_token_recuperacao, redefinir_senha_com_token,
+                      resetar_senha_por_admin)
 
 st.set_page_config(page_title="Agente IA Loterias - SaaS", layout="wide", page_icon="🍀")
 
 # ==========================================
-# INJEÇÃO ESTÉTICA (CSS) - REDUÇÃO DE ESPAÇOS SEM ALTERAR CÓDIGO
+# INJEÇÃO ESTÉTICA (CSS) - REDUÇÃO DE ESPAÇOS
 # ==========================================
 st.markdown("""
 <style>
@@ -86,7 +87,6 @@ with col_titulo:
     st.title("🍀 Agente de IA - Analista de Loterias")
 with col_sair:
     if st.session_state.logged_in:
-        # Espaçamento para alinhar o botão com o meio do título
         st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
         if st.button("🚪 Sair da Conta", type="secondary", use_container_width=True):
             st.session_state.logged_in = False
@@ -164,7 +164,6 @@ with st.sidebar:
                         st.error(msg)
                     
         with tab_rec:
-            # Fluxo 1: Solicitar o E-mail
             with st.form("form_pedir_token"):
                 st.caption("1º Passo: Solicite o código")
                 req_email = st.text_input("E-mail", placeholder="Digite seu e-mail", label_visibility="collapsed")
@@ -177,7 +176,6 @@ with st.sidebar:
                         else:
                             st.error(msg_req)
             
-            # Fluxo 2: Redefinir a Senha
             with st.form("form_redefinir_senha", clear_on_submit=True):
                 st.caption("2º Passo: Digite o código e a senha")
                 rec_email = st.text_input("Confirmar E-mail", placeholder="Confirme seu e-mail", label_visibility="collapsed")
@@ -224,7 +222,7 @@ with st.sidebar:
 
     with st.expander("♿ Acessibilidade e Ajuda"):
         st.markdown("""
-        * **Contraste:** O sistema se adapta ao tema do seu Windows.
+        * **Contraste:** O sistema se adapta ao tema do Windows.
         * **Dicas:** Passe o mouse sobre os ícones `?`.
         * **Zoom:** Utilize `Ctrl +` ou `Ctrl -` no teclado.
         """)
@@ -372,6 +370,21 @@ if is_admin:
         st.header("🛡️ Centro de Comando e Controle")
         st.subheader("Base de Clientes")
         st.dataframe(pd.DataFrame(listar_todos_usuarios(), columns=["ID", "Nome", "E-mail", "Cargo", "Chave de Licença"]), use_container_width=True, hide_index=True)
+        
+        st.divider()
+        # ==========================================
+        # GESTÃO DE ACESSOS (ADMIN OVERRIDE)
+        # ==========================================
+        st.subheader("🔑 Gestão de Acessos (Reset Manual)")
+        st.info("Utilize esta ferramenta caso o usuário não consiga receber o e-mail de recuperação por bloqueio de rede.")
+        with st.form("form_admin_override"):
+            target_email = st.text_input("E-mail do Usuário", placeholder="usuario@exemplo.com")
+            if st.form_submit_button("Resetar para Senha Padrão", type="primary", use_container_width=True):
+                suc_res, msg_res = resetar_senha_por_admin(target_email)
+                if suc_res:
+                    st.success(msg_res)
+                else:
+                    st.error(msg_res)
         
         st.divider()
         st.subheader("Configurações Globais de Tarifas")

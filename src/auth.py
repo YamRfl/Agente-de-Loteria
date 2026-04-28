@@ -35,7 +35,6 @@ def verificar_senha(senha_armazenada: str, senha_fornecida: str) -> bool:
 def inicializar_bd_auth():
     conn = obter_conexao()
     
-    # Tabela principal de Usuários
     conn.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +46,6 @@ def inicializar_bd_auth():
         )
     ''')
     
-    # Tabela temporária para os Tokens de Recuperação enviados por e-mail
     conn.execute('''
         CREATE TABLE IF NOT EXISTS recuperacao_senha (
             email TEXT PRIMARY KEY,
@@ -56,12 +54,9 @@ def inicializar_bd_auth():
         )
     ''')
     
-    # Puxa as credenciais mestres do .env de forma segura
-    # (Se não achar no .env, usa um padrão de emergência)
     admin_email = os.getenv("ADMIN_EMAIL", "admin@agente.com")
     admin_senha = os.getenv("ADMIN_SENHA", "Admin123!")
 
-    # Usuário Administrador Soberano
     admin = conn.execute("SELECT id FROM usuarios WHERE email = ?", (admin_email,)).fetchone()
     if not admin:
         senha_hash_admin = gerar_hash_senha(admin_senha)
@@ -81,7 +76,7 @@ def validar_regras_senha(senha):
 
 def registrar_usuario(nome, email, senha):
     if not EMAIL_REGEX.match(email):
-        return False, "Erro: Digite um e-mail válido (ex: nome@dominio.com)."
+        return False, "Erro: Digite um e-mail válido."
         
     valido, msg_senha = validar_regras_senha(senha)
     if not valido:
@@ -93,7 +88,7 @@ def registrar_usuario(nome, email, senha):
     try:
         conn.execute("INSERT INTO usuarios (nome, email, senha_hash) VALUES (?, ?, ?)", (nome, email, senha_hash))
         conn.commit()
-        return True, "Cadastro realizado com sucesso! Faça login."
+        return True, "Cadastro realizado com sucesso!"
     except sqlite3.IntegrityError:
         return False, "Erro: Este e-mail já está cadastrado."
     finally:
@@ -107,6 +102,85 @@ def autenticar_usuario(email, senha):
     if user and verificar_senha(user[3], senha):
         return True, {"id": user[0], "nome": user[1], "email": user[2], "role": user[4], "licenca": user[5]}
     return False, "E-mail ou senha inválidos."
+
+def solicitar_token_recuperacao(email):
+    if not EMAIL_REGEX.match(email):
+        return False, "E-mail inválido."
+        
+    conn = obter_conexao()
+    user = conn.execute("SELECT id FROM usuarios WHERE email = ?", (email,)).fetchone()
+    
+    if not user:
+        conn.close()
+        return True, "Se o e-mail existir na base, um código será enviado."
+        
+    token = ''.join(secrets.choice("0123456789") for _ in range(6))
+    validade = (datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%d %H:%M:%S')
+    
+    conn.execute("INSERT OR REPLACE INTO recuperacao_senha (email, token, expira_em) VALUES (?, ?, ?)", (email, token, validade))
+    conn.commit()
+    conn.close()
+    
+    enviado, msg_email = enviar_token_senha(email, token)
+    
+    if enviado:
+        return True, "Código de segurança enviado para o seu e-mail!"
+    else:
+        # Fallback para log de servidor caso o SMTP falhe na rede corporativa
+        print(f"[LOG SEGURANÇA] Token para {email}: {token}")
+        return False, f"Falha no envio (Rede): {msg_email}. O administrador pode resetar sua conta manualmente."
+
+def redefinir_senha_com_token(email, token, nova_senha):
+    conn = obter_conexao()
+    registro = conn.execute("SELECT token, expira_em FROM recuperacao_senha WHERE email = ?", (email,)).fetchone()
+    
+    if not registro:
+        conn.close()
+        return False, "Nenhum código solicitado."
+        
+    token_banco, expira_em = registro
+    if datetime.now() > datetime.strptime(expira_em, '%Y-%m-%d %H:%M:%S'):
+        conn.close()
+        return False, "Código expirado."
+        
+    if token != token_banco:
+        conn.close()
+        return False, "Código incorreto."
+        
+    valido, msg_senha = validar_regras_senha(nova_senha)
+    if not valido:
+        conn.close()
+        return False, msg_senha
+        
+    novo_hash = gerar_hash_senha(nova_senha)
+    conn.execute("UPDATE usuarios SET senha_hash = ? WHERE email = ?", (novo_hash, email))
+    conn.execute("DELETE FROM recuperacao_senha WHERE email = ?", (email,))
+    conn.commit()
+    conn.close()
+    return True, "Senha redefinida com sucesso!"
+
+# ==========================================
+# ROTA 2: ADMIN OVERRIDE (Reset Manual)
+# ==========================================
+def resetar_senha_por_admin(email_alvo):
+    """Permite ao Admin resetar a senha de qualquer usuário para um padrão."""
+    conn = obter_conexao()
+    user = conn.execute("SELECT id FROM usuarios WHERE email = ?", (email_alvo,)).fetchone()
+    
+    if not user:
+        conn.close()
+        return False, f"Usuário {email_alvo} não encontrado."
+        
+    # Senha padrão de recuperação
+    senha_padrao = "Agente@123"
+    novo_hash = gerar_hash_senha(senha_padrao)
+    
+    conn.execute("UPDATE usuarios SET senha_hash = ? WHERE email = ?", (novo_hash, email_alvo))
+    # Limpa possíveis tokens pendentes para evitar conflitos
+    conn.execute("DELETE FROM recuperacao_senha WHERE email = ?", (email_alvo,))
+    conn.commit()
+    conn.close()
+    return True, f"Sucesso! A senha de {email_alvo} agora é: {senha_padrao}"
 
 def alterar_senha_usuario(email, senha_antiga, nova_senha):
     conn = obter_conexao()
@@ -125,72 +199,7 @@ def alterar_senha_usuario(email, senha_antiga, nova_senha):
     conn.execute("UPDATE usuarios SET senha_hash = ? WHERE email = ?", (novo_hash, email))
     conn.commit()
     conn.close()
-    return True, "Senha alterada com segurança."
-
-# ==========================================
-# FLUXO DE RECUPERAÇÃO COM TOKEN
-# ==========================================
-def solicitar_token_recuperacao(email):
-    if not EMAIL_REGEX.match(email):
-        return False, "E-mail inválido."
-        
-    conn = obter_conexao()
-    user = conn.execute("SELECT id FROM usuarios WHERE email = ?", (email,)).fetchone()
-    
-    if not user:
-        conn.close()
-        return True, "Se o e-mail existir na nossa base, um código será enviado."
-        
-    # Gera um Token de 6 dígitos aleatório
-    token = ''.join(secrets.choice("0123456789") for _ in range(6))
-    validade = (datetime.now() + timedelta(minutes=15)).strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Grava o token no banco, sobrescrevendo se o usuário pedir duas vezes
-    conn.execute("INSERT OR REPLACE INTO recuperacao_senha (email, token, expira_em) VALUES (?, ?, ?)", (email, token, validade))
-    conn.commit()
-    conn.close()
-    
-    # Dispara o E-mail usando o seu arquivo mailer.py
-    enviado, msg_email = enviar_token_senha(email, token)
-    
-    if enviado:
-        return True, "Código de segurança enviado para o seu e-mail!"
-    else:
-        return False, msg_email
-
-def redefinir_senha_com_token(email, token, nova_senha):
-    conn = obter_conexao()
-    registro = conn.execute("SELECT token, expira_em FROM recuperacao_senha WHERE email = ?", (email,)).fetchone()
-    
-    if not registro:
-        conn.close()
-        return False, "Nenhum código foi solicitado para este e-mail."
-        
-    token_banco, expira_em = registro
-    agora = datetime.now()
-    data_expiracao = datetime.strptime(expira_em, '%Y-%m-%d %H:%M:%S')
-    
-    if agora > data_expiracao:
-        conn.execute("DELETE FROM recuperacao_senha WHERE email = ?", (email,))
-        conn.commit(); conn.close()
-        return False, "Este código expirou. Solicite um novo."
-        
-    if token != token_banco:
-        conn.close()
-        return False, "Código incorreto."
-        
-    valido, msg_senha = validar_regras_senha(nova_senha)
-    if not valido:
-        conn.close()
-        return False, msg_senha
-        
-    # Sucesso Total: Muda a senha e destroi o Token para não ser reusado
-    novo_hash = gerar_hash_senha(nova_senha)
-    conn.execute("UPDATE usuarios SET senha_hash = ? WHERE email = ?", (novo_hash, email))
-    conn.execute("DELETE FROM recuperacao_senha WHERE email = ?", (email,))
-    conn.commit()
-    conn.close()
-    return True, "Senha redefinida com sucesso! Você já pode fazer login."
+    return True, "Senha alterada com sucesso."
 
 def simular_pagamento_e_liberar_licenca(email):
     nova_licenca = str(uuid.uuid4())
