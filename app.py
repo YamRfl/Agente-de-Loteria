@@ -203,22 +203,24 @@ with st.sidebar:
                 st.balloons()
                 st.rerun()
                 
-        with st.expander("👤 Configurações da Conta"):
-            with st.form("form_alt_senha", clear_on_submit=True):
-                alt_senha_antiga = st.text_input("Senha Atual", type="password", placeholder="Senha atual", label_visibility="collapsed")
-                alt_senha_nova = st.text_input("Nova Senha", type="password", placeholder="Nova senha forte", label_visibility="collapsed")
-                submit_alt = st.form_submit_button("Atualizar Senha", use_container_width=True)
-                if submit_alt:
-                    suc, msg_alt = alterar_senha_usuario(st.session_state.user['email'], alt_senha_antiga, alt_senha_nova)
-                    if suc:
-                        st.success(msg_alt)
-                    else:
-                        st.error(msg_alt)
+        # Bloqueia configurações se houver pendência de troca
+        if not st.session_state.user.get('trocar_senha'):
+            with st.expander("👤 Configurações da Conta"):
+                with st.form("form_alt_senha", clear_on_submit=True):
+                    alt_senha_antiga = st.text_input("Senha Atual", type="password", placeholder="Senha atual", label_visibility="collapsed")
+                    alt_senha_nova = st.text_input("Nova Senha", type="password", placeholder="Nova senha forte", label_visibility="collapsed")
+                    submit_alt = st.form_submit_button("Atualizar Senha", use_container_width=True)
+                    if submit_alt:
+                        suc, msg_alt = alterar_senha_usuario(st.session_state.user['email'], alt_senha_antiga, alt_senha_nova)
+                        if suc:
+                            st.success(msg_alt)
+                        else:
+                            st.error(msg_alt)
 
-            if st.button("Sair (Logout)", use_container_width=True):
-                st.session_state.logged_in = False
-                st.session_state.user = None
-                st.rerun()
+        if st.button("Sair (Logout)", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.user = None
+            st.rerun()
 
     with st.expander("♿ Acessibilidade e Ajuda"):
         st.markdown("""
@@ -226,6 +228,25 @@ with st.sidebar:
         * **Dicas:** Passe o mouse sobre os ícones `?`.
         * **Zoom:** Utilize `Ctrl +` ou `Ctrl -` no teclado.
         """)
+
+# --- FIREWALL: TROCA DE SENHA OBRIGATÓRIA ---
+if st.session_state.logged_in and st.session_state.user.get('trocar_senha'):
+    st.warning("🛡️ **Segurança Crítica:** Sua senha foi resetada. Por favor, defina uma nova senha pessoal para continuar.")
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    with col_l2:
+        with st.form("f_troca_obrigatoria"):
+            s_temp = st.text_input("Senha Temporária Recebida", type="password")
+            s_nova = st.text_input("Nova Senha Forte", type="password")
+            s_conf = st.text_input("Confirme a Nova Senha", type="password")
+            if st.form_submit_button("Atualizar e Acessar Sistema", type="primary", use_container_width=True):
+                if s_nova != s_conf: st.error("As senhas não coincidem.")
+                else:
+                    sucesso, msg = alterar_senha_usuario(st.session_state.user['email'], s_temp, s_nova)
+                    if sucesso:
+                        st.success("Senha protegida com sucesso!"); st.session_state.user['trocar_senha'] = 0
+                        time.sleep(1.5); st.rerun()
+                    else: st.error(msg)
+    st.stop()
 
 # ==========================================
 # ABAS PRINCIPAIS DO SISTEMA
@@ -341,7 +362,7 @@ with tabs[2]:
                     if res["Qtd. Acertos"].astype(str).str.isnumeric().any() and res[res["Qtd. Acertos"] != '-']["Qtd. Acertos"].astype(int).max() > 3:
                         st.balloons()
         with c_conf2:
-            if st.button("🗑️ Apagar Histórico", use_container_width=True):
+            if st.button("🗑️ Apagar Histórico de Apostas", use_container_width=True):
                 limpar_apostas_banco(loteria)
                 st.cache_data.clear()
                 st.rerun()
@@ -367,25 +388,23 @@ with tabs[3]:
 
 if is_admin:
     with tabs[4]:
-        st.header("🛡️ Centro de Comando e Controle")
+        st.header("🛡️ Centro de Comando Admin")
         st.subheader("Base de Clientes")
-        st.dataframe(pd.DataFrame(listar_todos_usuarios(), columns=["ID", "Nome", "E-mail", "Cargo", "Chave de Licença"]), use_container_width=True, hide_index=True)
+        u_list = listar_todos_usuarios()
+        st.dataframe(pd.DataFrame(u_list, columns=["ID", "Nome", "E-mail", "Cargo", "Licença", "Troca Pendente"]), use_container_width=True, hide_index=True)
         
         st.divider()
-        # ==========================================
-        # GESTÃO DE ACESSOS (ADMIN OVERRIDE)
-        # ==========================================
-        st.subheader("🔑 Gestão de Acessos (Reset Manual)")
-        st.info("Utilize esta ferramenta caso o usuário não consiga receber o e-mail de recuperação por bloqueio de rede.")
-        with st.form("form_admin_override"):
-            target_email = st.text_input("E-mail do Usuário", placeholder="usuario@exemplo.com")
-            if st.form_submit_button("Resetar para Senha Padrão", type="primary", use_container_width=True):
-                suc_res, msg_res = resetar_senha_por_admin(target_email)
-                if suc_res:
-                    st.success(msg_res)
-                else:
-                    st.error(msg_res)
-        
+        st.subheader("🔑 Reset de Segurança (Senha Temporária)")
+        st.info("Gera uma senha aleatória e força a troca no próximo login do utilizador.")
+        with st.form("f_adm_reset"):
+            email_target = st.text_input("E-mail do Usuário")
+            if st.form_submit_button("Gerar Senha Temporária", type="primary", use_container_width=True):
+                status, p_temp = resetar_senha_por_admin(email_target)
+                if status:
+                    st.success(f"Resetado! Senha: **{p_temp}**")
+                    st.warning("⚠️ Forneça esta senha ao usuário. Ela expira após a troca.")
+                else: st.error(p_temp)
+
         st.divider()
         st.subheader("Configurações Globais de Tarifas")
         conn = obter_conexao()
